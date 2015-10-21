@@ -2,7 +2,7 @@
  * PWMInit.cpp
  *
  *  Created on: Oct 10, 2015
- *      Author: Thor
+ *      Author: Scott Edgerly & Rigel Paradise
  */
 
 #include "sin_table.h"

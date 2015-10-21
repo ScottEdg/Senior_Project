@@ -2,7 +2,7 @@
  * PWMInit.h
  *
  *  Created on: Oct 10, 2015
- *      Author: Thor
+ *      Author: Scott Edgerly & Rigel Paradise
  */
  #include <stdint.h>
 #ifndef SIN_TABLE_H_

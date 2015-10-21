@@ -3,8 +3,15 @@
 // Copyright (c) 2014 Liviu Ionescu.
 //
 
+/*
+ * main.cpp
+ *      Author: Scott Edgerly & Rigel Paradise
+ *      Description: This code is a work in progress and anything within this
+ *      file is subject to change.  This code will eventually be used to spin a
+ *      quadcopter motor up to 2000 RPM as stated in our Senior Project
+ *      contract.
+ */
 // ----------------------------------------------------------------------------
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
@@ -17,18 +24,6 @@
 #include "stm32f407xx.h"
 #include "stm32f4xx_hal_cortex.h"
 #include "sin_table.h"
-// ----------------------------------------------------------------------------
-//
-// Standalone STM32F4 empty sample (trace via DEBUG).
-//
-// Trace support is enabled by adding the TRACE macro definition.
-// By default the trace messages are forwarded to the DEBUG output,
-// but can be rerouted to any device or completely suppressed, by
-// changing the definitions required in system/src/diag/trace_impl.c
-// (currently OS_USE_TRACE_ITM, OS_USE_TRACE_SEMIHOSTING_DEBUG/_STDOUT).
-
-
-// ----- main() ---------------------------------------------------------------
 
 // Sample pragmas to cope with warnings. Please note the related line at
 // the end of this function, used to pop the compiler diagnostics status.
@@ -45,6 +40,7 @@ TIM_HandleTypeDef Tim4Handle; //Used to "count" through the sine LUT
 static TIM_HandleTypeDef Tim8Handle; //Used for Phase V and W
 static int index = 0;
 
+// ----- main() ---------------------------------------------------------------
 int main(int argc, char* argv[])
 {
 
