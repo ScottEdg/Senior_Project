@@ -39,6 +39,7 @@ static TIM_HandleTypeDef Tim1Handle; //used for Phase U
 TIM_HandleTypeDef Tim4Handle; //Used to "count" through the sine LUT
 static TIM_HandleTypeDef Tim8Handle; //Used for Phase V and W
 static int index = 0;
+static int speed;
 
 // ----- main() ---------------------------------------------------------------
 int main(int argc, char* argv[])
@@ -53,7 +54,7 @@ int main(int argc, char* argv[])
 	__HAL_RCC_GPIOC_CLK_ENABLE();
 
 	PWM_Init();
-	TIM4_Init();
+	//TIM4_Init();
 // ----------------------------------------------------------------------------
 	while(1);
 }
@@ -70,14 +71,19 @@ extern "C" void TIM4_IRQHandler(void)
         if (__HAL_TIM_GET_ITSTATUS(&Tim4Handle, TIM_IT_UPDATE) != RESET)
         {
             __HAL_TIM_CLEAR_FLAG(&Tim4Handle, TIM_FLAG_UPDATE);								//(These pin assignments should be double checked before use
-            __HAL_TIM_SET_COMPARE(&Tim1Handle,TIM_CHANNEL_1, sin_table[index]);				//Phase U+ on PA8
-            __HAL_TIM_SET_COMPARE(&Tim1Handle,TIM_CHANNEL_3, sin_table[(index+180)%360]);	//Phase U- on PA10
-            __HAL_TIM_SET_COMPARE(&Tim8Handle,TIM_CHANNEL_1, sin_table[(index+120)%360]);	//Phase V+ on PC6
-            __HAL_TIM_SET_COMPARE(&Tim8Handle,TIM_CHANNEL_2, sin_table[(index+300)%360]);	//Phase V- on PC7
-            __HAL_TIM_SET_COMPARE(&Tim8Handle,TIM_CHANNEL_3, sin_table[(index+240)%360]);	//Phase W+ on PC8
-            __HAL_TIM_SET_COMPARE(&Tim8Handle,TIM_CHANNEL_4, sin_table[(index+60)%360]); 	//Phase W- on PC9
+            __HAL_TIM_SET_COMPARE(&Tim1Handle,TIM_CHANNEL_1, sin_table2[index]);				//Phase U+ on PA8
+            __HAL_TIM_SET_COMPARE(&Tim1Handle,TIM_CHANNEL_3, sin_table2[(index+45)%90]);	//Phase U- on PA10
+            __HAL_TIM_SET_COMPARE(&Tim8Handle,TIM_CHANNEL_1, sin_table2[(index+30)%90]);	//Phase V+ on PC6
+            __HAL_TIM_SET_COMPARE(&Tim8Handle,TIM_CHANNEL_2, sin_table2[(index+75)%90]);	//Phase V- on PC7
+            __HAL_TIM_SET_COMPARE(&Tim8Handle,TIM_CHANNEL_3, sin_table2[(index+60)%90]);	//Phase W+ on PC8
+            __HAL_TIM_SET_COMPARE(&Tim8Handle,TIM_CHANNEL_4, sin_table2[(index+15)%90]); 	//Phase W- on PC9
             index++;
-            index = index % 360; //reset index to 0 if we get to 360
+            index = index % 90; //reset index to 0 if we get to 360
+        }
+    	speed = __HAL_TIM_GET_AUTORELOAD(&Tim4Handle);
+        if(speed>=100 && index == 0){
+        	speed--;
+        	__HAL_TIM_SET_AUTORELOAD(&Tim4Handle, speed-1);
         }
     }
 }
@@ -98,9 +104,9 @@ void PWM_Init(void)
 	HAL_GPIO_Init(GPIOA, &GPIO_BaseStruct);
 	// ------------------------------------------------------------------------
 
-	// --Set TIM1 to 10kHz switching frequency---------------------------------
+	// --Set TIM1 to 15kHz switching frequency---------------------------------
 	Tim1Handle.Instance = TIM1;
-	Tim1Handle.Init.Period = 16800;
+	Tim1Handle.Init.Period = 11200;
 	Tim1Handle.Init.Prescaler = 0;
 	Tim1Handle.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
 	Tim1Handle.Init.CounterMode = TIM_COUNTERMODE_UP;
@@ -122,9 +128,9 @@ void PWM_Init(void)
 	HAL_GPIO_Init(GPIOC, &GPIO_BaseStruct); //Initalize the struct
 	// ------------------------------------------------------------------------
 
-	// --Set TIM8 to 10kHz switching frequency---------------------------------
+	// --Set TIM8 to 15kHz switching frequency---------------------------------
 	Tim8Handle.Instance = TIM8;
-	Tim8Handle.Init.Period = 16800;
+	Tim8Handle.Init.Period = 11200;
 	Tim8Handle.Init.Prescaler = 0;
 	Tim8Handle.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
 	Tim8Handle.Init.CounterMode = TIM_COUNTERMODE_UP;
@@ -171,8 +177,8 @@ void TIM4_Init()
 	// --Set up TIM4-----------------------------------------------------------
 	Tim4Handle.Instance = TIM4;
 //TODO: Recalculate the Prescaler and create a range for the period to change the speed using ADC
-	Tim4Handle.Init.Period = 1000; //This changes how fast to go through the sine LUT
-	Tim4Handle.Init.Prescaler = 1679;
+	Tim4Handle.Init.Period = 400; //This changes how fast to go through the sine LUT
+	Tim4Handle.Init.Prescaler = 209;
 	Tim4Handle.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
 	Tim4Handle.Init.CounterMode = TIM_COUNTERMODE_UP;
 	Tim4Handle.State = HAL_TIM_STATE_RESET;
