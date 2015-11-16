@@ -36,9 +36,8 @@
 
 void PWM_Init(void);
 void TIM2_Init(void);
-void TIM3_Init(void);
-void TIM4_Init(void);
 void TIM5_Init(void);
+void TIM4_Init(void);
 void I2C_INIT(void);
 void USER_Init(void);
 void Display_Init(void);
@@ -48,7 +47,6 @@ extern "C"{
 void HAL_TIM_IC_MspInit(TIM_HandleTypeDef *htim);
 void HAL_I2C_MspInit(I2C_HandleTypeDef *hi2c);
 void TIM2_IRQHandler(void);
-void TIM3_IRQHandler(void);
 void TIM4_IRQHandler(void);
 void TIM5_IRQHandler(void);
 void EXTI0_IRQHandler(void);
@@ -59,7 +57,7 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin);
 };
 
 #define SPEEDSAMPLES 3
-#define SENSORSAMPLES 9
+#define SENSORSAMPLES 6
 #define MAXSPEED 2000
 #define CLOCKSPEED 84000000
 //list of LCD Commands
@@ -88,8 +86,8 @@ static volatile uint32_t speed[SPEEDSAMPLES];
 
 static TIM_HandleTypeDef Tim1Handle; //used for Phase U
 static TIM_HandleTypeDef Tim2Handle;
-static TIM_HandleTypeDef Tim3Handle;
 static TIM_HandleTypeDef Tim4Handle; //Used to "count" through the sine LUT
+static TIM_HandleTypeDef Tim5Handle;
 static TIM_HandleTypeDef Tim8Handle; //Used for Phase V and W
 static I2C_HandleTypeDef I2CHandle;
 static TIM_IC_InitTypeDef SysConf;
@@ -98,7 +96,7 @@ static int index = 0;
 uint32_t desired = 1143;
 uint32_t current = desired;
 uint32_t desiredRPM = 100;
-uint32_t currentRPM = desiredRPM;
+uint32_t currentRPM = 0;
 
 static HAL_LockTypeDef speedLock = HAL_UNLOCKED;
 static HAL_LockTypeDef sensorLock = HAL_UNLOCKED;
@@ -125,7 +123,7 @@ int main(int argc, char* argv[])
 // --Initialization------------------------------------------------------------
 	__HAL_RCC_TIM1_CLK_ENABLE();
     __HAL_RCC_TIM2_CLK_ENABLE();
-    __HAL_RCC_TIM3_CLK_ENABLE();
+    __HAL_RCC_TIM5_CLK_ENABLE();
 	__HAL_RCC_TIM8_CLK_ENABLE();
 	__HAL_RCC_TIM4_CLK_ENABLE();
 	__HAL_RCC_GPIOA_CLK_ENABLE();
@@ -135,10 +133,10 @@ int main(int argc, char* argv[])
 	PWM_Init();
 	TIM4_Init();
 	TIM2_Init();
-	TIM3_Init();
+	TIM5_Init();
 	I2C_INIT();
 	HAL_TIM_IC_Init(&Tim2Handle);
-	HAL_TIM_IC_Init(&Tim3Handle);
+	HAL_TIM_IC_Init(&Tim5Handle);
 	HAL_I2C_Init(&I2CHandle);
 	USER_Init();
 
@@ -277,16 +275,16 @@ void TIM2_Init(){
 
 // ----------------------------------------------------------------------------
 
-void TIM3_Init(){
-	// --Set up TIM3-----------------------------------------------------------
-	Tim3Handle.Instance = TIM3;
-	Tim3Handle.Init.Period = 0xFFFF; 												//This changes how fast to go through the sine LUT
-	Tim3Handle.Init.Prescaler = 0;
-	Tim3Handle.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-	Tim3Handle.Init.CounterMode = TIM_COUNTERMODE_UP;
-	Tim3Handle.State = HAL_TIM_STATE_RESET;
+void TIM5_Init(){
+	// --Set up Tim5-----------------------------------------------------------
+	Tim5Handle.Instance = TIM5;
+	Tim5Handle.Init.Period = 0xFFFFFFFF; 												//This changes how fast to go through the sine LUT
+	Tim5Handle.Init.Prescaler = 0;
+	Tim5Handle.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+	Tim5Handle.Init.CounterMode = TIM_COUNTERMODE_UP;
+	Tim5Handle.State = HAL_TIM_STATE_RESET;
 
-	if (HAL_TIM_IC_Init(&Tim3Handle) != HAL_OK) {
+	if (HAL_TIM_IC_Init(&Tim5Handle) != HAL_OK) {
 		// Error
 	}
 
@@ -294,11 +292,11 @@ void TIM3_Init(){
 	SysConf.ICFilter = 0;
 	SysConf.ICPolarity = TIM_ICPOLARITY_FALLING;
 	SysConf.ICSelection = TIM_ICSELECTION_DIRECTTI;
-	if (HAL_TIM_IC_ConfigChannel(&Tim3Handle, &SysConf, TIM_CHANNEL_1) != HAL_OK) {
+	if (HAL_TIM_IC_ConfigChannel(&Tim5Handle, &SysConf, TIM_CHANNEL_2) != HAL_OK) {
 		// Error
 	}
 
-	if (HAL_TIM_IC_Start_IT(&Tim3Handle, TIM_CHANNEL_1) != HAL_OK) {
+	if (HAL_TIM_IC_Start_IT(&Tim5Handle, TIM_CHANNEL_2) != HAL_OK) {
 		// Error
 	}
 }
@@ -413,8 +411,9 @@ void Display(void){
 		average += sensor[i];
 	}
 	average /= SENSORSAMPLES;
-	average = (average/CLOCKSPEED);
-	currentRPM = average*20;
+	average = (average/CLOCKSPEED)*3;
+	average = 1.0f / average;
+	currentRPM = (int)(average*60);
 	average = 0;
 
 	itoa(desiredRPM, (char*)DESIRED, 10);
@@ -464,20 +463,20 @@ void HAL_TIM_IC_MspInit(TIM_HandleTypeDef *htim){
 		HAL_NVIC_EnableIRQ(TIM2_IRQn);
 	}
 
-	if (htim->Instance == TIM3){
+	if (htim->Instance == TIM5){
 
 		GPIO_InitTypeDef GPIO_BaseStruct;
 
-		GPIO_BaseStruct.Pin = GPIO_PIN_4;
+		GPIO_BaseStruct.Pin = GPIO_PIN_1;
 		GPIO_BaseStruct.Mode = GPIO_MODE_AF_PP;
 		GPIO_BaseStruct.Pull = GPIO_PULLUP;
 		GPIO_BaseStruct.Speed = GPIO_SPEED_HIGH;
-		GPIO_BaseStruct.Alternate = GPIO_AF2_TIM3;
+		GPIO_BaseStruct.Alternate = GPIO_AF2_TIM5;
 
-		HAL_GPIO_Init(GPIOB, &GPIO_BaseStruct);
+		HAL_GPIO_Init(GPIOA, &GPIO_BaseStruct);
 
-		HAL_NVIC_SetPriority(TIM3_IRQn, 2, 0);
-		HAL_NVIC_EnableIRQ(TIM3_IRQn);
+		HAL_NVIC_SetPriority(TIM5_IRQn, 2, 0);
+		HAL_NVIC_EnableIRQ(TIM5_IRQn);
 	}
 }
 
@@ -500,8 +499,8 @@ void TIM2_IRQHandler(void){
 
 // ----------------------------------------------------------------------------
 
-void TIM3_IRQHandler(void){
-	HAL_TIM_IRQHandler(&Tim3Handle);
+void TIM5_IRQHandler(void){
+	HAL_TIM_IRQHandler(&Tim5Handle);
 }
 
 // ----------------------------------------------------------------------------
@@ -512,16 +511,16 @@ void TIM4_IRQHandler(void)
     {
         if (__HAL_TIM_GET_ITSTATUS(&Tim4Handle, TIM_IT_UPDATE) != RESET)
         {
-        	double dooty = 0.3;
-//        	if((desired > current) && (index == 0)){
-//        		current+=2;
-//        		__HAL_TIM_SET_AUTORELOAD(&Tim4Handle,current);
-//        	}
-//        	if((desired < current) && (index == 0)){
-//       		current -=2;
-//        		__HAL_TIM_SET_AUTORELOAD(&Tim4Handle,current);
-//        	}
-        	__HAL_TIM_SET_AUTORELOAD(&Tim4Handle,desired);
+        	float dooty = 0.35;
+        	if((desired > current) && (index == 0)){
+        		current+=2;
+        		__HAL_TIM_SET_AUTORELOAD(&Tim4Handle,current);
+        	}
+        	if((desired < current) && (index == 0)){
+        		current-=2;
+        		__HAL_TIM_SET_AUTORELOAD(&Tim4Handle,current);
+        	}
+//        	if(desired!=0) __HAL_TIM_SET_AUTORELOAD(&Tim4Handle,desired);
             __HAL_TIM_CLEAR_FLAG(&Tim4Handle, TIM_FLAG_UPDATE);								//(These pin assignments should be double checked before use
             __HAL_TIM_SET_COMPARE(&Tim1Handle,TIM_CHANNEL_1, uint32_t(dooty * sin_table[index]));				//Phase U+ on PA8
             __HAL_TIM_SET_COMPARE(&Tim1Handle,TIM_CHANNEL_3, uint32_t(dooty * sin_table[(index+15)%30]));	//Phase U- on PA10
@@ -585,7 +584,16 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim){
 
 		temp1 = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_1);
 		temp2 = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_2);
-		speed[speedIndex++] = temp2-temp1;
+
+		if (temp2 >= temp1) {
+			speed[speedIndex++] = temp2 - temp1;
+		} else {
+			speed[speedIndex++] = 0xFFFFFFFF - temp1 + temp2;
+		}
+
+		if(sensorIndex == SENSORSAMPLES){
+			sensorIndex = 0;
+		}
 
 		if(speedIndex == SPEEDSAMPLES){
 			speedIndex = 0;
@@ -609,11 +617,16 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim){
 		_UNLOCK(speedLock);
 	}
 
-	if (htim->Instance == TIM3){
+	if (htim->Instance == TIM5){
 		_GET_LOCK_NORETURN(sensorLock);
 		if (flag2!=0){
-			temp3 = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_1);
-			sensor[sensorIndex++] = temp3 - old;
+			temp3 = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_2);
+			if (temp3 >= old) {
+				sensor[sensorIndex++] = temp3 - old;
+			} else {
+				sensor[sensorIndex++] = 0xFFFFFFFF - old + temp3;
+			}
+
 			old = temp3;
 
 			if(sensorIndex == SENSORSAMPLES){
@@ -621,7 +634,7 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim){
 			}
 		}
 		else{
-			old = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_1);
+			old = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_2);
 			flag2 = 1;
 		}
 		_UNLOCK(sensorLock);
