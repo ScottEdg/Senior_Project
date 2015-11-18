@@ -57,7 +57,7 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin);
 };
 
 #define SPEEDSAMPLES 3
-#define SENSORSAMPLES 6
+#define SENSORSAMPLES 12
 #define MAXSPEED 2000
 #define CLOCKSPEED 84000000
 //list of LCD Commands
@@ -93,7 +93,7 @@ static I2C_HandleTypeDef I2CHandle;
 static TIM_IC_InitTypeDef SysConf;
 
 static int index = 0;
-uint32_t desired = 1143;
+uint32_t desired = 1203;
 uint32_t current = desired;
 uint32_t desiredRPM = 100;
 uint32_t currentRPM = 0;
@@ -316,6 +316,8 @@ void TIM4_Init(){
 		while(1);
 	}
 
+	Tim4Handle.Instance->CR1 |= 1<<7;                          //Set Auto-Reload Pre-Load Enable
+
 	// --Priority set up-------------------------------------------------------
 	HAL_TIM_Base_Start_IT(&Tim4Handle); // start timer interrupts
 
@@ -512,15 +514,7 @@ void TIM4_IRQHandler(void)
         if (__HAL_TIM_GET_ITSTATUS(&Tim4Handle, TIM_IT_UPDATE) != RESET)
         {
         	float dooty = 0.35;
-        	if((desired > current) && (index == 0)){
-        		current+=2;
-        		__HAL_TIM_SET_AUTORELOAD(&Tim4Handle,current);
-        	}
-        	if((desired < current) && (index == 0)){
-        		current-=2;
-        		__HAL_TIM_SET_AUTORELOAD(&Tim4Handle,current);
-        	}
-//        	if(desired!=0) __HAL_TIM_SET_AUTORELOAD(&Tim4Handle,desired);
+
             __HAL_TIM_CLEAR_FLAG(&Tim4Handle, TIM_FLAG_UPDATE);								//(These pin assignments should be double checked before use
             __HAL_TIM_SET_COMPARE(&Tim1Handle,TIM_CHANNEL_1, uint32_t(dooty * sin_table[index]));				//Phase U+ on PA8
             __HAL_TIM_SET_COMPARE(&Tim1Handle,TIM_CHANNEL_3, uint32_t(dooty * sin_table[(index+15)%30]));	//Phase U- on PA10
@@ -607,9 +601,21 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim){
 			average /= SPEEDSAMPLES;
 			average = (average/CLOCKSPEED)*1000;
 			average -= 1;
-			desiredRPM = average * 2000;
-			average *= 14000;
+			if(average < 0.023) average = 0.023;
+			if(average > .5) average = .5;
+			desiredRPM = average * 4200;
+			average *= 29400;
 			desired = 800000/average;
+        	if((desired > current) && (current < 1203)){
+        		if((desired - current) > 100) current+=20;
+        		else current+=2;
+        		__HAL_TIM_SET_AUTORELOAD(&Tim4Handle,current);
+        	}
+        	if((desired < current) && current > 26){
+        		if((current - desired) > 100) current -=20;
+        		else current-=2;
+        		__HAL_TIM_SET_AUTORELOAD(&Tim4Handle,current);
+        	}
 			average = 0;
 			flag = 0;
 		}
