@@ -9,15 +9,16 @@
 #include "stm32f4xx_hal_tim.h"
 #include "stm32f4xx_hal_rcc.h"
 #include "stm32f4xx_hal_gpio.h"
+#include "stm32f4xx_hal_i2c.h"
 #include "init.h"
 
 
 void CLK_Init(void){
 	__HAL_RCC_TIM1_CLK_ENABLE();
     __HAL_RCC_TIM2_CLK_ENABLE();
+	__HAL_RCC_TIM4_CLK_ENABLE();
     __HAL_RCC_TIM5_CLK_ENABLE();
 	__HAL_RCC_TIM8_CLK_ENABLE();
-	__HAL_RCC_TIM4_CLK_ENABLE();
 	__HAL_RCC_GPIOA_CLK_ENABLE();
 	__HAL_RCC_GPIOB_CLK_ENABLE();
 	__HAL_RCC_GPIOC_CLK_ENABLE();
@@ -170,7 +171,7 @@ void TIM4_Init(TIM_HandleTypeDef * htim, uint32_t current){
 void TIM5_Init(TIM_HandleTypeDef * htim, TIM_IC_InitTypeDef * sConfig){
 	// --Set up Tim5-----------------------------------------------------------
 	htim->Instance = TIM5;
-	htim->Init.Period = 0xFFFFFFFF; 												//This changes how fast to go through the sine LUT
+	htim->Init.Period = 0xFFFFFFFF; //This changes how fast to go through the sine LUT
 	htim->Init.Prescaler = 0;
 	htim->Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
 	htim->Init.CounterMode = TIM_COUNTERMODE_UP;
@@ -191,4 +192,93 @@ void TIM5_Init(TIM_HandleTypeDef * htim, TIM_IC_InitTypeDef * sConfig){
 	if (HAL_TIM_IC_Start_IT(htim, TIM_CHANNEL_2) != HAL_OK) {
 		// Error
 	}
+}
+
+
+
+void I2C_INIT(I2C_HandleTypeDef *hi2c){
+	GPIO_InitTypeDef GPIO_BaseStruct;
+	GPIO_BaseStruct.Pin = GPIO_PIN_6;
+	GPIO_BaseStruct.Mode = GPIO_MODE_AF_OD;
+	GPIO_BaseStruct.Pull = GPIO_PULLUP;
+	GPIO_BaseStruct.Speed = GPIO_SPEED_FAST;
+	GPIO_BaseStruct.Alternate = GPIO_AF4_I2C1;
+	HAL_GPIO_Init(GPIOB, &GPIO_BaseStruct);
+
+	GPIO_BaseStruct.Pin = GPIO_PIN_7;
+	HAL_GPIO_Init(GPIOB, &GPIO_BaseStruct);
+
+	hi2c->Instance = I2C1;
+	hi2c->Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
+	hi2c->Init.ClockSpeed = 50000;
+	hi2c->Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
+	hi2c->Init.DutyCycle = I2C_DUTYCYCLE_16_9;
+	hi2c->Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
+	hi2c->Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
+	hi2c->Init.OwnAddress1 = 0xFE;
+	hi2c->Init.OwnAddress2 = 0xFE;
+
+	if (HAL_I2C_Init(hi2c) != HAL_OK) {
+		// TODO: ErrorHandler();
+		while(1);
+	}
+}
+
+
+void USER_Init(void){
+	GPIO_InitTypeDef GPIO_BaseStruct;
+	GPIO_BaseStruct.Pin = GPIO_PIN_0;
+	GPIO_BaseStruct.Mode = GPIO_MODE_IT_FALLING;
+	GPIO_BaseStruct.Pull = GPIO_NOPULL;
+	GPIO_BaseStruct.Speed = GPIO_SPEED_LOW;
+	HAL_GPIO_Init(GPIOA, &GPIO_BaseStruct);
+
+	HAL_NVIC_SetPriority(EXTI0_IRQn, 1, 1);
+	HAL_NVIC_EnableIRQ(EXTI0_IRQn);
+}
+
+
+void HAL_TIM_IC_MspInit(TIM_HandleTypeDef *htim){
+
+	if (htim->Instance == TIM2) {
+
+		GPIO_InitTypeDef GPIO_BaseStruct;
+
+		GPIO_BaseStruct.Pin = GPIO_PIN_3;
+		GPIO_BaseStruct.Mode = GPIO_MODE_AF_PP;
+		GPIO_BaseStruct.Pull = GPIO_PULLUP;
+		GPIO_BaseStruct.Speed = GPIO_SPEED_HIGH;
+		GPIO_BaseStruct.Alternate = GPIO_AF1_TIM2;
+
+		HAL_GPIO_Init(GPIOB, &GPIO_BaseStruct);
+
+		HAL_NVIC_SetPriority(TIM2_IRQn, 2, 0);
+		HAL_NVIC_EnableIRQ(TIM2_IRQn);
+	}
+
+	if (htim->Instance == TIM5){
+
+		GPIO_InitTypeDef GPIO_BaseStruct;
+
+		GPIO_BaseStruct.Pin = GPIO_PIN_1;
+		GPIO_BaseStruct.Mode = GPIO_MODE_AF_PP;
+		GPIO_BaseStruct.Pull = GPIO_PULLUP;
+		GPIO_BaseStruct.Speed = GPIO_SPEED_HIGH;
+		GPIO_BaseStruct.Alternate = GPIO_AF2_TIM5;
+
+		HAL_GPIO_Init(GPIOA, &GPIO_BaseStruct);
+
+		HAL_NVIC_SetPriority(TIM5_IRQn, 2, 0);
+		HAL_NVIC_EnableIRQ(TIM5_IRQn);
+	}
+}
+
+
+void HAL_I2C_MspInit(I2C_HandleTypeDef *hi2c){
+		__HAL_RCC_I2C1_CLK_ENABLE();
+
+		HAL_NVIC_SetPriority(I2C1_EV_IRQn, 3, 0);
+		HAL_NVIC_EnableIRQ(I2C1_EV_IRQn);
+		HAL_NVIC_SetPriority(I2C1_ER_IRQn, 4, 0);
+		HAL_NVIC_EnableIRQ(I2C1_ER_IRQn);
 }
