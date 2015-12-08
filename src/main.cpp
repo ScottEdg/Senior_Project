@@ -17,7 +17,6 @@
 #include <math.h>
 #include "diag/Trace.h"
 #include "stm32f4xx_hal.h"
-//#include "stm32f4xx_hal_adc.h"
 #include "stm32f4xx_hal_i2c.h"
 #include "stm32f4xx_hal_tim.h"
 #include "stm32f4xx_hal_tim_ex.h"
@@ -26,6 +25,7 @@
 #include "stm32f407xx.h"
 #include "stm32f4xx_hal_cortex.h"
 #include "sin_table.h"
+#include "init.h"
 
 // Sample pragmas to cope with warnings. Please note the related line at
 // the end of this function, used to pop the compiler diagnostics status.
@@ -34,10 +34,6 @@
 #pragma GCC diagnostic ignored "-Wmissing-declarations"
 #pragma GCC diagnostic ignored "-Wreturn-type"
 
-void PWM_Init(void);
-void TIM2_Init(void);
-void TIM5_Init(void);
-void TIM4_Init(void);
 void I2C_INIT(void);
 void USER_Init(void);
 void Display_Init(void);
@@ -60,6 +56,7 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin);
 #define SENSORSAMPLES 12
 #define MAXSPEED 2000
 #define CLOCKSPEED 84000000
+
 //list of LCD Commands
 #define PREFIX 0xFE
 #define DISPLAY_ON 0x41
@@ -121,19 +118,11 @@ int main(int argc, char* argv[])
 {
 
 // --Initialization------------------------------------------------------------
-	__HAL_RCC_TIM1_CLK_ENABLE();
-    __HAL_RCC_TIM2_CLK_ENABLE();
-    __HAL_RCC_TIM5_CLK_ENABLE();
-	__HAL_RCC_TIM8_CLK_ENABLE();
-	__HAL_RCC_TIM4_CLK_ENABLE();
-	__HAL_RCC_GPIOA_CLK_ENABLE();
-	__HAL_RCC_GPIOB_CLK_ENABLE();
-	__HAL_RCC_GPIOC_CLK_ENABLE();
-
-	PWM_Init();
-	TIM4_Init();
-	TIM2_Init();
-	TIM5_Init();
+	CLK_Init();
+	PWM_Init(&Tim1Handle, &Tim8Handle); //initalizes two timers and sets up PWM to drive motor
+	TIM2_Init(&Tim2Handle, &SysConf);
+	TIM4_Init(&Tim4Handle, current);
+	TIM5_Init(&Tim5Handle, &SysConf);
 	I2C_INIT();
 	HAL_TIM_IC_Init(&Tim2Handle);
 	HAL_TIM_IC_Init(&Tim5Handle);
@@ -152,179 +141,6 @@ int main(int argc, char* argv[])
 }
 
 #pragma GCC diagnostic pop
-
-
-// ----------------------------------------------------------------------------
-
-void PWM_Init(void){
-	// --Set pins PA8 & PA10 for Phase U---------------------------------------
-	TIM_OC_InitTypeDef OCHandle;
-	GPIO_InitTypeDef GPIO_BaseStruct;
-	GPIO_BaseStruct.Pin = GPIO_PIN_8 | GPIO_PIN_10;
-	GPIO_BaseStruct.Mode = GPIO_MODE_AF_PP;
-	GPIO_BaseStruct.Pull = GPIO_NOPULL;
-	GPIO_BaseStruct.Speed = GPIO_SPEED_HIGH;
-	GPIO_BaseStruct.Alternate = GPIO_AF1_TIM1;
-
-	HAL_GPIO_Init(GPIOA, &GPIO_BaseStruct);
-	// ------------------------------------------------------------------------
-
-	// --Set TIM1 to 20kHz switching frequency---------------------------------
-	Tim1Handle.Instance = TIM1;
-	Tim1Handle.Init.Period = 8399;
-	Tim1Handle.Init.Prescaler = 0;
-	Tim1Handle.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-	Tim1Handle.Init.CounterMode = TIM_COUNTERMODE_UP;
-	Tim1Handle.State = HAL_TIM_STATE_RESET;
-
-	if (HAL_TIM_PWM_Init(&Tim1Handle) != HAL_OK) {
-		// TODO: Error_Handler();
-		while(1);
-	}
-	// ------------------------------------------------------------------------
-
-	// --Set pins PC6 & PC7 for Phase V and PC8 & PC9 for Phase W--------------
-	GPIO_BaseStruct.Pin = GPIO_PIN_6 | GPIO_PIN_7 | GPIO_PIN_8 | GPIO_PIN_9;
-	GPIO_BaseStruct.Mode = GPIO_MODE_AF_PP;
-	GPIO_BaseStruct.Pull = GPIO_NOPULL;
-	GPIO_BaseStruct.Speed = GPIO_SPEED_HIGH;
-	GPIO_BaseStruct.Alternate = GPIO_AF3_TIM8;
-
-	HAL_GPIO_Init(GPIOC, &GPIO_BaseStruct); //Initalize the struct
-	// ------------------------------------------------------------------------
-
-	// --Set TIM8 to 20kHz switching frequency---------------------------------
-	Tim8Handle.Instance = TIM8;
-	Tim8Handle.Init.Period = 8399;
-	Tim8Handle.Init.Prescaler = 0;
-	Tim8Handle.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-	Tim8Handle.Init.CounterMode = TIM_COUNTERMODE_UP;
-	Tim8Handle.State = HAL_TIM_STATE_RESET;
-
-	if (HAL_TIM_PWM_Init(&Tim8Handle) != HAL_OK) {
-		// TODO: Error_Handler();
-		while(1);
-	}
-	// ------------------------------------------------------------------------
-
-	// --Initialize OCR register for both TIM1 and TIM8 to 0-------------------
-	OCHandle.OCMode = TIM_OCMODE_PWM1;
-	OCHandle.Pulse = 0;
-	OCHandle.OCPolarity = TIM_OCPOLARITY_HIGH;
-	OCHandle.OCNPolarity = TIM_OCPOLARITY_HIGH;
-	OCHandle.OCIdleState = TIM_OCIDLESTATE_RESET;
-	OCHandle.OCNIdleState = TIM_OCNIDLESTATE_RESET;
-	OCHandle.OCFastMode = TIM_OCFAST_ENABLE;
-	// ------------------------------------------------------------------------
-
-	// --Configure and Start all timers and channels---------------------------
-//TODO: Perhaps find a better way to start all of these at once
-	HAL_TIM_PWM_ConfigChannel(&Tim1Handle, &OCHandle, TIM_CHANNEL_1);
-	HAL_TIM_PWM_ConfigChannel(&Tim1Handle, &OCHandle, TIM_CHANNEL_3);
-	HAL_TIM_PWM_ConfigChannel(&Tim8Handle, &OCHandle, TIM_CHANNEL_1);
-	HAL_TIM_PWM_ConfigChannel(&Tim8Handle, &OCHandle, TIM_CHANNEL_2);
-	HAL_TIM_PWM_ConfigChannel(&Tim8Handle, &OCHandle, TIM_CHANNEL_3);
-	HAL_TIM_PWM_ConfigChannel(&Tim8Handle, &OCHandle, TIM_CHANNEL_4);
-
-	HAL_TIM_PWM_Start(&Tim1Handle, TIM_CHANNEL_1);
-	HAL_TIM_PWM_Start(&Tim1Handle, TIM_CHANNEL_3);
-	HAL_TIM_PWM_Start(&Tim8Handle, TIM_CHANNEL_1);
-	HAL_TIM_PWM_Start(&Tim8Handle, TIM_CHANNEL_2);
-	HAL_TIM_PWM_Start(&Tim8Handle, TIM_CHANNEL_3);
-	HAL_TIM_PWM_Start(&Tim8Handle, TIM_CHANNEL_4);
-	// ------------------------------------------------------------------------
-}
-
-// ----------------------------------------------------------------------------
-
-void TIM2_Init(){
-	// --Set up TIM2-----------------------------------------------------------
-	Tim2Handle.Instance = TIM2;
-	Tim2Handle.Init.Period = 0xFFFFFFFF; 										//This changes how fast to go through the sine LUT
-	Tim2Handle.Init.Prescaler = 0;
-	Tim2Handle.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-	Tim2Handle.Init.CounterMode = TIM_COUNTERMODE_UP;
-	Tim2Handle.State = HAL_TIM_STATE_RESET;
-
-	if (HAL_TIM_IC_Init(&Tim2Handle) != HAL_OK) {
-		// Error
-	}
-
-	SysConf.ICPrescaler = TIM_ICPSC_DIV1;
-	SysConf.ICFilter = 0;
-	SysConf.ICPolarity = TIM_ICPOLARITY_RISING;
-	SysConf.ICSelection = TIM_ICSELECTION_INDIRECTTI;
-	if (HAL_TIM_IC_ConfigChannel(&Tim2Handle, &SysConf, TIM_CHANNEL_1) != HAL_OK) {
-		// Error
-	}
-
-	SysConf.ICPolarity = TIM_ICPOLARITY_FALLING;
-	SysConf.ICSelection = TIM_ICSELECTION_DIRECTTI;
-	if (HAL_TIM_IC_ConfigChannel(&Tim2Handle, &SysConf, TIM_CHANNEL_2) != HAL_OK) {
-		// Error
-	}
-
-	if (HAL_TIM_IC_Start_IT(&Tim2Handle, TIM_CHANNEL_1) != HAL_OK) {
-		// Error
-	}
-
-	if (HAL_TIM_IC_Start_IT(&Tim2Handle, TIM_CHANNEL_2) != HAL_OK) {
-		// Error
-	}
-}
-
-// ----------------------------------------------------------------------------
-
-void TIM5_Init(){
-	// --Set up Tim5-----------------------------------------------------------
-	Tim5Handle.Instance = TIM5;
-	Tim5Handle.Init.Period = 0xFFFFFFFF; 												//This changes how fast to go through the sine LUT
-	Tim5Handle.Init.Prescaler = 0;
-	Tim5Handle.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-	Tim5Handle.Init.CounterMode = TIM_COUNTERMODE_UP;
-	Tim5Handle.State = HAL_TIM_STATE_RESET;
-
-	if (HAL_TIM_IC_Init(&Tim5Handle) != HAL_OK) {
-		// Error
-	}
-
-	SysConf.ICPrescaler = TIM_ICPSC_DIV1;
-	SysConf.ICFilter = 0;
-	SysConf.ICPolarity = TIM_ICPOLARITY_FALLING;
-	SysConf.ICSelection = TIM_ICSELECTION_DIRECTTI;
-	if (HAL_TIM_IC_ConfigChannel(&Tim5Handle, &SysConf, TIM_CHANNEL_2) != HAL_OK) {
-		// Error
-	}
-
-	if (HAL_TIM_IC_Start_IT(&Tim5Handle, TIM_CHANNEL_2) != HAL_OK) {
-		// Error
-	}
-}
-
-// ----------------------------------------------------------------------------
-
-void TIM4_Init(){
-	// --Set up TIM4-----------------------------------------------------------
-	Tim4Handle.Instance = TIM4;
-	Tim4Handle.Init.Period = current; //This changes how fast to go through the sine LUT
-	Tim4Handle.Init.Prescaler = 209;
-	Tim4Handle.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-	Tim4Handle.Init.CounterMode = TIM_COUNTERMODE_UP;
-	Tim4Handle.State = HAL_TIM_STATE_RESET;
-
-	if (HAL_TIM_Base_Init(&Tim4Handle) != HAL_OK) {
-		while(1);
-	}
-
-	Tim4Handle.Instance->CR1 |= 1<<7;                          //Set Auto-Reload Pre-Load Enable
-
-	// --Priority set up-------------------------------------------------------
-	HAL_TIM_Base_Start_IT(&Tim4Handle); // start timer interrupts
-
-	HAL_NVIC_SetPriority(TIM4_IRQn, 0, 1); //set priority to highest
-	HAL_NVIC_EnableIRQ(TIM4_IRQn);
-	// ------------------------------------------------------------------------
-}
 
 // ----------------------------------------------------------------------------
 
